@@ -3,9 +3,8 @@
 import argparse
 import json
 import time
-import urllib.request
 from pathlib import Path
-from mcp_ocr_engines_test import Client, payload
+from mcp_ocr_engines_test import Client, authenticated_request, device_urlopen, payload
 
 def main():
     parser = argparse.ArgumentParser()
@@ -20,9 +19,10 @@ def main():
     assert not payload(c.call('get_screen_info'))['locked'], 'Unlock before installation'
     previous_pid = payload(c.call('get_frontmost_app')).get('pid')
     path = Path(args.deb)
-    request = urllib.request.Request(base + '/upload_file', data=path.read_bytes(),
+    request = authenticated_request(base + '/upload_file', data=path.read_bytes(),
                                     headers={'X-Filename': path.name})
-    uploaded = json.load(urllib.request.urlopen(request, timeout=60))
+    with device_urlopen(request, timeout=60) as response:
+        uploaded = json.load(response)
     response = c.call('install_app', {'path': uploaded['path']})
     assert 'error' not in response and not response.get('result', {}).get('isError'), response
     print('Install response:', response, flush=True)

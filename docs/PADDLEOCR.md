@@ -188,8 +188,8 @@ accuracy guarantee. Validate a threshold on the intended device/screens.
   inference remains running after that failure is returned. Next call starts fresh.
 - Cancellation keys use the incoming session header and typed request ID. The
   existing server issues one shared session token; clients sharing it must use
-  distinct outstanding request IDs. This addition does not replace MCP session
-  management or introduce authentication.
+  distinct outstanding request IDs. This OCR addition does not replace MCP session
+  management or change authentication, which is enforced separately.
 - On the tested SpringBoard, `poll` on the private Unix socket returns `EPERM`.
   The parent uses a bounded `select` readiness fallback; it does not spin, change
   the Vision environment, or elevate SpringBoard privileges.
@@ -214,6 +214,10 @@ images, session reuse and missing/corrupted resources. Actual device reports are
 recorded separately; do not substitute host tests for iOS 13 runtime coverage.
 
 Device/package checks (use only on devices authorized for UI and fault tests):
+
+These clients use HTTP Basic auth with fixed username `mcp`. Export
+`IOS_MCP_PASSWORD` in the shell or answer the secure prompt; do not pass the
+password as a command-line argument or embed it in the URL.
 
 ```sh
 python3 tests/paddle_package_test.py --version 1.2.8

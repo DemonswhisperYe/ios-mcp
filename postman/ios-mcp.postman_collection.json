@@ -2,8 +2,23 @@
   "info": {
     "_postman_id": "fdb06367-0400-4b55-a407-c90c6ef5c69a",
     "name": "ios-mcp",
-    "description": "Postman collection for exercising the ios-mcp HTTP/MCP endpoints.",
+    "description": "Postman collection for exercising the ios-mcp HTTP/MCP endpoints. Every request inherits HTTP Basic auth with fixed username `mcp`; set `connectionPassword` locally in the selected environment.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "basic",
+    "basic": [
+      {
+        "key": "username",
+        "value": "mcp",
+        "type": "string"
+      },
+      {
+        "key": "password",
+        "value": "{{connectionPassword}}",
+        "type": "string"
+      }
+    ]
   },
   "event": [
     {
@@ -42,7 +57,7 @@
             "health"
           ]
         },
-        "description": "Simple HTTP health probe."
+        "description": "Remote HTTP health probe. Inherits the collection's Basic auth; loopback /health from the Settings page does not need credentials."
       }
     },
     {

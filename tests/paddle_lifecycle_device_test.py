@@ -14,7 +14,7 @@ import subprocess
 import time
 from pathlib import Path
 from urllib.parse import urlsplit
-from mcp_ocr_engines_test import Client, engine, payload
+from mcp_ocr_engines_test import Client, auth_headers, engine, payload
 
 def main():
     p = argparse.ArgumentParser()
@@ -140,11 +140,13 @@ def main():
     pid = paddle()['recognition']['worker_pid']
     stop(pid)
     u = urlsplit(a.url)
-    conn = http.client.HTTPConnection(u.hostname, u.port, timeout=5)
+    connection = http.client.HTTPSConnection if u.scheme == 'https' else http.client.HTTPConnection
+    conn = connection(u.hostname, u.port, timeout=5)
     try:
         conn.request('POST', u.path, json.dumps({'jsonrpc':'2.0','id':'disconnect', 'method':'tools/call',
             'params':{'name':a.fault_tool,'arguments':fault_arguments}}),
-            {'Content-Type':'application/json','Mcp-Session-Id':c.session,'MCP-Protocol-Version':'2025-11-25'})
+            {'Content-Type':'application/json','Mcp-Session-Id':c.session,'MCP-Protocol-Version':'2025-11-25',
+             **auth_headers()})
         time.sleep(.5)
         conn.close()
         time.sleep(.5)

@@ -9,12 +9,18 @@ Files:
 Recommended usage:
 1. Import the collection and environment into Postman.
 2. Select the `ios-mcp Local` environment.
-3. Start with `Health`, `Initialize`, and `Tools List`.
-4. Click the dedicated tool request you want to test directly.
-5. For computer-local file uploads, set `sample_upload_file_path` and `sample_upload_filename`, then send `File Transfer / upload_file`.
-6. For IPA or DEB install, send `upload_file` first, then send `App Management / install_app` with the captured `uploaded_file_path`.
-7. If needed, adjust the sample environment variables before sending requests.
-8. Keep `Generic Tool Call` as a fallback for ad-hoc testing or newly added tools.
+3. Set `connectionPassword` to the password saved in the device's **Settings → iOS MCP**. It is a Postman `secret` variable with an empty, non-secret default; do not export or share an environment after filling it in.
+4. Start with `Health`, `Initialize`, and `Tools List`. If the device has no password yet (first install or upgrade) or the password is wrong, protected requests return `401 Unauthorized`.
+5. Click the dedicated tool request you want to test directly.
+6. For computer-local file uploads, set `sample_upload_file_path` and `sample_upload_filename`, then send `File Transfer / upload_file`.
+7. For IPA or DEB install, send `upload_file` first, then send `App Management / install_app` with the captured `uploaded_file_path`.
+8. If needed, adjust the sample environment variables before sending requests.
+9. Keep `Generic Tool Call` as a fallback for ad-hoc testing or newly added tools.
+
+Authentication:
+- The collection sets collection-level HTTP Basic auth for every request: username `mcp`, password `{{connectionPassword}}`.
+- Remote `/mcp`, `/upload_file`, `/download_file`, and `/health` all require those credentials. The Settings page's loopback `/health` check is the only unauthenticated health probe and is not part of this collection.
+- Set or rotate the password in **Settings → iOS MCP**; it applies without restarting the service. No sample password is checked in.
 
 Notes:
 - Most requests use shared sample variables such as `sample_x`, `sample_y`, `sample_bundle_id`, and `sample_text`.

@@ -14,7 +14,7 @@ TWEAK_NAME = ios-mcp
 BUNDLE_NAME = iosmcpprefs
 
 ios-mcp_FILES = Tweak.x MCPServer.m MCPLogger.m HIDManager.m ScreenManager.m ClipboardManager.m AppManager.m AccessibilityManager.m TextInputManager.m FileSystemManager.m LogManager.m OCRManager.m MCPProcessUtil.m MCPAXQueryContext.m MCPAXRemoteContextResolver.m MCPUIElementSerializer.m MCPUIElementsFacade.m MCPAXAttributeBridge.m MCPAXNodeSource.m
-ios-mcp_FILES += VisionOCREngine.m PaddleOCRManager.m MCPOCRRequestContext.m
+ios-mcp_FILES += VisionOCREngine.m PaddleOCRManager.m MCPOCRRequestContext.m IOSMCPAuth.m
 ios-mcp_CFLAGS = -fobjc-arc -Wno-unused-function -Wno-deprecated-declarations
 ios-mcp_FRAMEWORKS = IOKit UIKit CoreGraphics QuartzCore MobileCoreServices AVFoundation Security Vision
 
@@ -26,9 +26,9 @@ else ifeq ($(THEOS_PACKAGE_SCHEME),rootless)
     ios-mcp_CFLAGS += -DMCP_ROOTLESS=1
 endif
 
-iosmcpprefs_FILES = prefs/IOSMCPRootListController.m prefs/IOSMCPQRCodeCell.m prefs/IOSMCPLocalization.m MCPLogger.m
+iosmcpprefs_FILES = prefs/IOSMCPRootListController.m prefs/IOSMCPQRCodeCell.m prefs/IOSMCPLocalization.m MCPLogger.m IOSMCPAuth.m
 iosmcpprefs_CFLAGS = -fobjc-arc
-iosmcpprefs_FRAMEWORKS = UIKit CoreGraphics
+iosmcpprefs_FRAMEWORKS = UIKit CoreGraphics Security
 iosmcpprefs_PRIVATE_FRAMEWORKS = Preferences
 iosmcpprefs_LDFLAGS = -F$(THEOS)/sdks/iPhoneOS16.5.sdk/System/Library/PrivateFrameworks
 iosmcpprefs_INSTALL_PATH = /Library/PreferenceBundles

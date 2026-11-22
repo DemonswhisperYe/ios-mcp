@@ -58,6 +58,26 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>id</key>
+			<string>passwordGroup</string>
+			<key>label</key>
+			<string>连接密码</string>
+			<key>footerText</key>
+			<string>正在检测密码状态...</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>changeConnectionPassword:</string>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>id</key>
+			<string>passwordButton</string>
+			<key>label</key>
+			<string>设置连接密码</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>id</key>
 			<string>debugLogGroup</string>
 			<key>label</key>
 			<string>Debug 日志</string>

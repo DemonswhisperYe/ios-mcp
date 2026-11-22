@@ -1,13 +1,72 @@
 #!/usr/bin/env python3
 """MCP API regression for both OCR engines. Run on an awake device showing text.
 No shell commands or system settings are changed by this script.
+
+The server requires HTTP Basic auth (username ``mcp``) on remote endpoints. Set
+``IOS_MCP_PASSWORD`` to the password saved in Settings, or run interactively and
+answer the no-echo prompt. Never put the password in a URL or command line.
 """
 import argparse
+import base64
 import concurrent.futures
+import getpass
 import json
+import os
+import sys
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
+
+AUTH_USERNAME = 'mcp'
+PASSWORD_ENV = 'IOS_MCP_PASSWORD'
+_password = None
+
+def device_password():
+    global _password
+    if _password is not None:
+        return _password
+    value = os.environ.get(PASSWORD_ENV)
+    if not value:
+        if sys.stdin.isatty() and sys.stderr.isatty():
+            value = getpass.getpass('ios-mcp connection password (username mcp): ')
+        if not value:
+            raise SystemExit('Set %s to the password saved in Settings > iOS MCP, '
+                             'or run interactively for a secure prompt.' % PASSWORD_ENV)
+    _password = value
+    return value
+
+def authorization_header():
+    credentials = ('%s:%s' % (AUTH_USERNAME, device_password())).encode('utf-8')
+    return 'Basic ' + base64.b64encode(credentials).decode('ascii')
+
+def auth_headers():
+    return {'Authorization': authorization_header()}
+
+def _origin(url):
+    parts = urlsplit(url)
+    port = parts.port or (443 if parts.scheme.lower() == 'https' else 80)
+    return parts.scheme.lower(), (parts.hostname or '').lower(), port
+
+class _SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Follow redirects only on the original origin so credentials never leave it."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if _origin(req.full_url) != _origin(newurl):
+            raise urllib.error.HTTPError(
+                req.full_url, code, 'refusing cross-origin redirect for authenticated request',
+                headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+_opener = urllib.request.build_opener(_SameOriginRedirectHandler())
+
+def authenticated_request(url, data=None, headers=None, method=None):
+    request = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
+    request.add_header('Authorization', authorization_header())
+    return request
+
+def device_urlopen(request, timeout=45):
+    return _opener.open(request, timeout=timeout)
 
 class Client:
     def __init__(self, url):
@@ -23,8 +82,8 @@ class Client:
         if not notification: data['id'] = self.next_id if request_id is None else request_id
         headers = {'Content-Type':'application/json','Accept':'application/json, text/event-stream','MCP-Protocol-Version':'2025-11-25'}
         if self.session: headers['Mcp-Session-Id'] = self.session
-        req = urllib.request.Request(self.url, data=json.dumps(data).encode(), headers=headers)
-        with urllib.request.urlopen(req, timeout=45) as response:
+        req = authenticated_request(self.url, data=json.dumps(data).encode(), headers=headers)
+        with device_urlopen(req, timeout=45) as response:
             self.session = response.headers.get('Mcp-Session-Id') or self.session
             text = response.read().decode()
         if not text: return {}

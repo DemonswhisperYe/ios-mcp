@@ -72,21 +72,26 @@ Package name:
 ### Recommended checks after installation
 
 1. Restart `SpringBoard`
-2. Open the following URL in a browser:
+2. Open **Settings** → **iOS MCP** on the device and set a connection password. The username is always `mcp`; clients use the password saved here. The password must be 12–128 UTF-8 bytes with no control characters.
+3. From your computer, run (`-u mcp` prompts for the password; never put it in the command, URL, or a script):
 
-```text
-http://DEVICE_IP:8090/health
+```sh
+curl -u mcp 'http://DEVICE_IP:8090/health'
 ```
 
-3. If you get the following response, the service is running correctly:
+4. If you get the following response, the service is running correctly:
 
 ```json
 {"status":"ok","server":"ios-mcp","version":"1.2.8","protocolVersion":"2025-11-25","supportedProtocolVersions":["2025-11-25","2025-06-18","2025-03-26"]}
 ```
 
+If no password is configured, including after upgrading from a release without authentication, remote `/mcp`, `/upload_file`, `/download_file`, and `/health` deny access until you save one in Settings. Saving or rotating the password takes effect immediately without restarting the service. The Settings page checks `/health` over loopback `127.0.0.1` without credentials.
+
 ## Usage
 
-After installation, open **Settings** → **iOS MCP** on your device. Start the server, then tap "Copy / Share MCP Prompt" and paste it into your AI agent's prompt.
+After installation, open **Settings** → **iOS MCP**, set the connection password, and start the server. Then tap "Copy / Share MCP Prompt" and paste it into your AI agent's prompt.
+
+Remote MCP clients must send HTTP Basic authentication: username `mcp`, password is the connection password saved in Settings. Use the client's Basic Auth setting. For clients with custom headers only, set `Authorization` privately to `Basic ` followed by the Base64 encoding of the UTF-8 bytes of `mcp:password`. Treat this header as a password.
 
 The settings page follows the device's preferred language: Simplified Chinese, Traditional Chinese, or English. No manual language selection is needed.
 
@@ -96,7 +101,9 @@ The settings page follows the device's preferred language: Simplified Chinese, T
 
 ## Security Notes
 
-- The MCP server has no built-in authentication — it is recommended to use it only on local networks
+- Every remote HTTP endpoint (`/mcp`, `/upload_file`, `/download_file`, `/health`) requires HTTP Basic auth with fixed username `mcp` and the password configured in Settings. The local Settings page checks `/health` over loopback without credentials
+- HTTP Basic does not encrypt traffic, so use it only on trusted local networks; for access across networks use an encrypted channel such as SSH port forwarding and never expose the service port directly to the internet
+- The device stores only a salted PBKDF2-SHA256 verifier. Keep the client password in private credential settings and out of shared prompts, URLs, shell history, and exported Postman environments.
 - MCP protocol support defaults to `2025-11-25` and remains compatible with `2025-06-18` and `2025-03-26`; HTTP responses include `MCP-Protocol-Version`
 - When the device is locked or the screen is off, the server blocks interactive/mutating tools such as tap, swipe, text input, app launch, and shell commands; observation, screenshot, and wake/recovery tools remain allowed
 - The `run_command` tool can execute arbitrary shell commands — use with caution

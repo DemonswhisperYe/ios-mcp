@@ -8,6 +8,7 @@
 #include <roothide.h>
 #import "../IOSMCPPreferences.h"
 #import "../MCPLogger.h"
+#import "../IOSMCPAuth.h"
 
 @interface IOSMCPRootListController () <UIGestureRecognizerDelegate, UITextFieldDelegate>
 
@@ -16,8 +17,11 @@
 @property (nonatomic, assign) NSUInteger serverStatusGeneration;
 @property (nonatomic, strong) UITapGestureRecognizer *keyboardDismissTapGesture;
 @property (nonatomic, weak) id<UITextFieldDelegate> originalPortTextFieldDelegate;
+@property (nonatomic, assign) BOOL passwordSaveBusy;
+@property (nonatomic, weak) UIAlertController *passwordDialog;
 
 - (void)applyPortChangeFromPort:(uint16_t)previousPort toPort:(uint16_t)newPort;
+- (void)changeConnectionPassword:(PSSpecifier *)specifier;
 - (void)configurePortTextField;
 - (void)dismissKeyboardFromTap:(UITapGestureRecognizer *)gestureRecognizer;
 - (void)fetchServerRunningOnPort:(uint16_t)port completion:(void (^)(BOOL running, NSError *error))completion;
@@ -30,8 +34,14 @@
                             finalAttempt:(BOOL)finalAttempt;
 - (UITableViewCell *)portPreferenceCell;
 - (void)portTextFieldDidEndOnExit:(UITextField *)textField;
+- (void)refreshPasswordStatus:(NSString *)message;
 - (void)respringButtonTapped:(id)sender;
+- (void)saveConnectionPassword:(NSString *)password;
+- (void)passwordFieldsChanged:(UITextField *)sender;
 - (UITextField *)textFieldInView:(UIView *)view;
+- (void)updatePasswordStatusText:(NSString *)statusText
+                     buttonTitle:(NSString *)buttonTitle
+                   buttonEnabled:(BOOL)buttonEnabled;
 - (void)updateVisibleFooterText:(NSString *)text forSpecifier:(PSSpecifier *)specifier;
 - (void)setServerControlBusyState:(BOOL)busy;
 
@@ -151,6 +161,7 @@ static BOOL IOSMCPEnabledPreference(void) {
     [super viewWillAppear:animated];
     [self refreshPromptText];
     [self refreshDebugLogFooter];
+    [self refreshPasswordStatus:nil];
     [self refreshServerStatus];
     dispatch_async(dispatch_get_main_queue(), ^{
         [self configurePortTextField];
@@ -216,6 +227,99 @@ static BOOL IOSMCPEnabledPreference(void) {
     } else {
         [self refreshServerStatus];
     }
+}
+
+- (void)refreshPasswordStatus:(NSString *)message {
+    BOOL configured = IOSMCPHasPassword();
+    NSString *statusText = configured
+        ? IOSMCPLocalizedString(@"已设置连接密码。客户端使用用户名 mcp 和此密码连接。")
+        : IOSMCPLocalizedString(@"未设置连接密码。设置后客户端使用用户名 mcp 和此密码连接。");
+    NSString *buttonTitle = self.passwordSaveBusy
+        ? IOSMCPLocalizedString(@"正在保存...")
+        : (configured ? IOSMCPLocalizedString(@"更改连接密码") : IOSMCPLocalizedString(@"设置连接密码"));
+    [self updatePasswordStatusText:message ?: statusText
+                       buttonTitle:buttonTitle
+                     buttonEnabled:!self.passwordSaveBusy];
+}
+
+- (void)updatePasswordStatusText:(NSString *)statusText
+                     buttonTitle:(NSString *)buttonTitle
+                   buttonEnabled:(BOOL)buttonEnabled {
+    PSSpecifier *groupSpecifier = [self specifierForID:@"passwordGroup"];
+    PSSpecifier *buttonSpecifier = [self specifierForID:@"passwordButton"];
+
+    if (groupSpecifier) {
+        [groupSpecifier setProperty:statusText forKey:PSFooterTextGroupKey];
+        [self updateVisibleFooterText:statusText forSpecifier:buttonSpecifier ?: groupSpecifier];
+    }
+
+    if (!buttonSpecifier) {
+        return;
+    }
+
+    NSString *currentTitle = [buttonSpecifier propertyForKey:PSTitleKey] ?: buttonSpecifier.name;
+    NSNumber *currentEnabledValue = [buttonSpecifier propertyForKey:PSEnabledKey];
+    BOOL currentEnabled = currentEnabledValue ? currentEnabledValue.boolValue : YES;
+    if ([currentTitle isEqualToString:buttonTitle] && currentEnabled == buttonEnabled) {
+        return;
+    }
+
+    buttonSpecifier.name = buttonTitle;
+    [buttonSpecifier setProperty:buttonTitle forKey:PSTitleKey];
+    [buttonSpecifier setProperty:@(buttonEnabled) forKey:PSEnabledKey];
+    [self reloadSpecifier:buttonSpecifier animated:NO];
+}
+
+- (void)changeConnectionPassword:(PSSpecifier *)specifier {
+    [self deselectSpecifier:specifier];
+    if (self.passwordSaveBusy || self.passwordDialog) return;
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:IOSMCPLocalizedString(@"连接密码")
+                                   message:IOSMCPLocalizedString(@"两次输入相同的密码即可保存。密码需为 12–128 个 UTF-8 字节，不能全为空白或含控制字符。")
+                                   preferredStyle:UIAlertControllerStyleAlert];
+    for (NSString *label in @[IOSMCPLocalizedString(@"新密码"), IOSMCPLocalizedString(@"确认新密码")]) {
+        [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+            field.placeholder = label;
+            field.secureTextEntry = YES;
+            field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+            field.autocorrectionType = UITextAutocorrectionTypeNo;
+            field.spellCheckingType = UITextSpellCheckingTypeNo;
+            [field addTarget:self action:@selector(passwordFieldsChanged:) forControlEvents:UIControlEventEditingChanged];
+        }];
+    }
+    [alert addAction:[UIAlertAction actionWithTitle:IOSMCPLocalizedString(@"取消") style:UIAlertActionStyleCancel handler:nil]];
+    NSArray<UITextField *> *fields = alert.textFields;
+    __weak typeof(self) weakSelf = self;
+    UIAlertAction *save = [UIAlertAction actionWithTitle:IOSMCPLocalizedString(@"保存") style:UIAlertActionStyleDefault
+                                               handler:^(__unused UIAlertAction *action) {
+        if ([fields.firstObject.text isEqualToString:fields.lastObject.text]) {
+            [weakSelf saveConnectionPassword:fields.firstObject.text];
+        }
+    }];
+    [alert addAction:save];
+    alert.preferredAction = save;
+    save.enabled = NO;
+    self.passwordDialog = alert;
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)passwordFieldsChanged:(UITextField *)sender {
+    UIAlertController *alert = self.passwordDialog;
+    NSString *password = alert.textFields.firstObject.text;
+    alert.preferredAction.enabled = IOSMCPPasswordIsValid(password) && [password isEqualToString:alert.textFields.lastObject.text];
+}
+
+- (void)saveConnectionPassword:(NSString *)password {
+    self.passwordSaveBusy = YES;
+    [self refreshPasswordStatus:nil];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        BOOL saved = IOSMCPSavePassword(password);
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.passwordSaveBusy = NO;
+            [self refreshPasswordStatus:saved ? IOSMCPLocalizedString(@"连接密码已保存。")
+                                            : IOSMCPLocalizedString(@"无法保存连接密码，请重试。")];
+        });
+    });
 }
 
 - (void)toggleServer:(PSSpecifier *)specifier {
